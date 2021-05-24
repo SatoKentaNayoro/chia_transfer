@@ -29,22 +29,14 @@ const (
 )
 
 type Config struct {
-	MiddleTmps []MiddleTmp
-	FinalDirs  []FinalDir
+	MiddleTmps []string
+	FinalDirs  []string
 }
 
 type FinalDirWithLock struct {
 	Path   string
 	Status string
 	Flock  *sync.Mutex
-}
-
-type MiddleTmp struct {
-	Path string
-}
-
-type FinalDir struct {
-	Path string
 }
 
 type SrcFile struct {
@@ -67,11 +59,11 @@ func main() {
 	for {
 		// add middle Files
 		for _, mp := range config.MiddleTmps {
-			filepath.Walk(mp.Path, func(path string, info os.FileInfo, err error) error {
+			filepath.Walk(mp, func(path string, info os.FileInfo, err error) error {
 				if !info.IsDir() && info.Mode().IsRegular() {
-					fullPath := mp.Path + "/" + info.Name()
+					fullPath := mp + "/" + info.Name()
 					srcFile := SrcFile{
-						SrcDir:   mp.Path,
+						SrcDir:   mp,
 						FilePath: fullPath,
 					}
 					// if no in, add one
@@ -134,13 +126,13 @@ func loadConfig() (*Config, error) {
 		return nil, errors.New("len dirs error")
 	}
 	for i, p := range config.MiddleTmps {
-		pp := strings.TrimRight(p.Path, "/")
-		config.MiddleTmps[i].Path = pp
+		pp := strings.TrimRight(p, "/")
+		config.MiddleTmps[i] = pp
 	}
 
 	for i, p := range config.FinalDirs {
-		pp := strings.TrimRight(p.Path, "/")
-		config.MiddleTmps[i].Path = pp
+		pp := strings.TrimRight(p, "/")
+		config.MiddleTmps[i] = pp
 	}
 
 	err = checkPathDoubledAndExisted(&config)
@@ -154,7 +146,7 @@ func initFinalDirs(cfg *Config) []*FinalDirWithLock {
 	var fdlList = make([]*FinalDirWithLock, 0)
 	for _, v := range cfg.FinalDirs {
 		fdl := new(FinalDirWithLock)
-		fdl.Path = v.Path
+		fdl.Path = v
 		fdl.Status = StatusOnFree
 		fdlList = append(fdlList, fdl)
 	}
