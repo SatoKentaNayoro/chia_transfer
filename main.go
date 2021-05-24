@@ -232,7 +232,7 @@ func myCopy(src, dst string) (err error) {
 
 	for {
 		if stop {
-			return errors.New(move_common.StoppedBySyscall)
+			return errors.New("StoppedBySyscall")
 		}
 
 		n, err := source.Read(buf)
