@@ -14,11 +14,11 @@ endif
 
 GOFLAGS+=-ldflags="-s -w $(ldflags)"
 
-move_sectors:
+chia_transfer:
 	rm -f chia_transfer
 	go build $(GOFLAGS) -o chia_transfer ./cmd
 .PHONY: chia_transfer
-BINS+=move_sectors
+BINS+=chia_transfer
 
 build: chia_transfer
 
@@ -26,7 +26,7 @@ build: chia_transfer
 
 install: install-chia-transfer
 
-install-move-sectors:
+install-chia-transfer:
 	install -C ./chia_transfer /usr/local/bin/chia_transfer
 
 
