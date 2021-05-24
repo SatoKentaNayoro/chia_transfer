@@ -88,7 +88,7 @@ func main() {
 		}
 		// add middle Files
 		for _, mp := range config.MiddleTmps {
-			filepath.Walk(mp, func(path string, info os.FileInfo, err error) error {
+			err := filepath.Walk(mp, func(path string, info os.FileInfo, err error) error {
 				if !info.IsDir() && info.Mode().IsRegular() {
 					fullPath := mp + "/" + info.Name()
 					srcFile := SrcFile{
@@ -100,8 +100,12 @@ func main() {
 						toDoFiles[fullPath] = srcFile
 					}
 				}
-				return nil
+				return err
 			})
+			if err != nil {
+				log.Error(err)
+				return
+			}
 		}
 		select {
 		case threadChan <- struct{}{}:
