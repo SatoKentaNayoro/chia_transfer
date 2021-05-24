@@ -15,6 +15,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"os/signal"
 	"os/user"
 	"path"
 	"path/filepath"
@@ -25,6 +26,7 @@ import (
 )
 
 var log = logging.Logger("transfer")
+var stop = false
 
 const (
 	StatusOnWorking = "StatusOnWorking"
@@ -59,7 +61,31 @@ func main() {
 
 	var threadChan = make(chan struct{}, len(finalDirWithLockList))
 	var toDoFiles = make(map[string]SrcFile)
+	stopSignal := make(chan os.Signal, 2)
+	signal.Notify(stopSignal, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		select {
+		case <-stopSignal:
+			stop = true
+		}
+	}()
 	for {
+		if stop {
+			log.Warn("stop by signal,waiting all working task stop")
+			for {
+				allStop := true
+				for _, f := range finalDirWithLockList {
+					if f.Status != StatusOnFree {
+						allStop = false
+					}
+				}
+				if allStop {
+					log.Warn("all working task stopped")
+					return
+				}
+				time.Sleep(time.Second * 5)
+			}
+		}
 		// add middle Files
 		for _, mp := range config.MiddleTmps {
 			filepath.Walk(mp, func(path string, info os.FileInfo, err error) error {
@@ -99,11 +125,17 @@ func main() {
 
 					if fdl.Status == StatusOnFree && dstStat.Bavail*uint64(dstStat.Bsize) >= uint64(srcStat.Size()) {
 						go func() {
+							log.Infof("start myCopy %s", srcFile.FilePath)
 							fdl.Flock.Lock()
 							fdl.Status = StatusOnWorking
 							fdl.Flock.Unlock()
-							err2 := copy(srcFile.FilePath, temporaryPath)
-							if err2 != nil || !isEqualFile(srcFile.FilePath, temporaryPath) {
+							err2 := myCopy(srcFile.FilePath, temporaryPath)
+							if err2 != nil {
+								log.Errorf("myCopy %s error: %s", srcFile.FilePath, err.Error())
+								os.Remove(temporaryPath)
+							}
+							if !isEqualFile(srcFile.FilePath, temporaryPath) {
+								log.Errorf("myCopy %s error: dst not equal with src", srcFile.FilePath)
 								os.Remove(temporaryPath)
 							}
 							fdl.Flock.Lock()
@@ -111,7 +143,7 @@ func main() {
 							fdl.Flock.Unlock()
 							// del src file
 							os.Remove(srcFile.FilePath)
-							log.Infof("copy %s to %s done", srcFile.FilePath, temporaryPath)
+							log.Infof("myCopy %s to %s done", srcFile.FilePath, temporaryPath)
 							<-threadChan
 						}()
 					}
@@ -160,7 +192,7 @@ func initFinalDirs(cfg *Config) []*FinalDirWithLock {
 	return fdlList
 }
 
-func copy(src, dst string) (err error) {
+func myCopy(src, dst string) (err error) {
 	const BufferSize = 1 * 1024 * 1024
 	buf := make([]byte, BufferSize)
 
@@ -199,9 +231,9 @@ func copy(src, dst string) (err error) {
 	}()
 
 	for {
-		//if stop {
-		//	return errors.New(move_common.StoppedBySyscall)
-		//}
+		if stop {
+			return errors.New(move_common.StoppedBySyscall)
+		}
 
 		n, err := source.Read(buf)
 		if err != nil && err != io.EOF {
