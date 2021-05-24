@@ -137,6 +137,7 @@ func loadConfig() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	log.Info(config)
 	if len(config.FinalDirs) <= 0 || len(config.MiddleTmps) <= 0 {
 		return nil, errors.New("len dirs error")
 	}
