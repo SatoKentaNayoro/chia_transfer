@@ -132,7 +132,10 @@ func loadConfig() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	config := Config{}
+	config := Config{
+		make([]string, 0),
+		make([]string, 0),
+	}
 	err = yaml.Unmarshal(raw, &config)
 	if err != nil {
 		return nil, err
