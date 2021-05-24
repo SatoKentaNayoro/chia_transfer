@@ -132,10 +132,7 @@ func loadConfig() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	config := Config{
-		make([]string, 0),
-		make([]string, 0),
-	}
+	config := Config{}
 	err = yaml.Unmarshal(raw, &config)
 	if err != nil {
 		return nil, err
@@ -149,9 +146,9 @@ func loadConfig() (*Config, error) {
 		config.MiddleTmps[i] = pp
 	}
 
-	for i, p := range config.FinalDirs {
-		pp := strings.TrimRight(p, "/")
-		config.MiddleTmps[i] = pp
+	for idx, fp := range config.FinalDirs {
+		pp := strings.TrimRight(fp, "/")
+		config.MiddleTmps[idx] = pp
 	}
 
 	err = checkPathDoubledAndExisted(&config)
