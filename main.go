@@ -15,6 +15,8 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"os/user"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -122,11 +124,11 @@ func main() {
 }
 
 func loadConfig() (*Config, error) {
-	abs, err := filepath.Abs("~/chia_transfer.yaml")
+	currentUser, err := user.Current()
 	if err != nil {
 		return nil, err
 	}
-	raw, err := ioutil.ReadFile(abs)
+	raw, err := ioutil.ReadFile(path.Join(currentUser.HomeDir, "chia_transfer.yaml"))
 	if err != nil {
 		return nil, err
 	}
