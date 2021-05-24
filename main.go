@@ -141,15 +141,6 @@ func loadConfig() (*Config, error) {
 	if len(config.FinalDirs) <= 0 || len(config.MiddleTmps) <= 0 {
 		return nil, errors.New("len dirs error")
 	}
-	for i, p := range config.MiddleTmps {
-		pp := strings.TrimRight(p, "/")
-		config.MiddleTmps[i] = pp
-	}
-
-	for idx, fp := range config.FinalDirs {
-		pp := strings.TrimRight(fp, "/")
-		config.MiddleTmps[idx] = pp
-	}
 
 	err = checkPathDoubledAndExisted(&config)
 	if err != nil {
