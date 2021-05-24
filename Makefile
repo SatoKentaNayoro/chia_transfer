@@ -7,13 +7,6 @@ unexport GOFLAGS
 
 BINS:=
 
-ldflags=-X=chia_transfer/build.CurrentCommit=+git.$(subst -,.,$(shell git describe --always --match=NeVeRmAtCh --dirty 2>/dev/null || git rev-parse --short HEAD 2>/dev/null))
-ifneq ($(strip $(LDFLAGS)),)
-	ldflags+=-extldflags=$(LDFLAGS)
-endif
-
-GOFLAGS+=-ldflags="-s -w $(ldflags)"
-
 chia_transfer:
 	rm -f chia_transfer
 	go build $(GOFLAGS) -o chia_transfer .
