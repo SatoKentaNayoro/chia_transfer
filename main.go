@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -86,7 +87,15 @@ func main() {
 						//delete(toDoFiles, k)
 						break
 					}
-					if fdl.Status == StatusOnFree {
+					srcStat, err := os.Stat(srcFile.FilePath)
+					if err != nil {
+						log.Error(err)
+						break
+					}
+					var dstStat = new(syscall.Statfs_t)
+					_ = syscall.Statfs(srcFile.SrcDir, dstStat)
+
+					if fdl.Status == StatusOnFree && dstStat.Bavail*uint64(dstStat.Bsize) >= uint64(srcStat.Size()) {
 						go func() {
 							fdl.Flock.Lock()
 							fdl.Status = StatusOnWorking
