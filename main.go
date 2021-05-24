@@ -122,7 +122,11 @@ func main() {
 }
 
 func loadConfig() (*Config, error) {
-	raw, err := ioutil.ReadFile("~/chia_transfer.yaml")
+	abs, err := filepath.Abs("~/chia_transfer.yaml")
+	if err != nil {
+		return nil, err
+	}
+	raw, err := ioutil.ReadFile(abs)
 	if err != nil {
 		return nil, err
 	}
