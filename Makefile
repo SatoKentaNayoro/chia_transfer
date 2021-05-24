@@ -16,7 +16,7 @@ GOFLAGS+=-ldflags="-s -w $(ldflags)"
 
 chia_transfer:
 	rm -f chia_transfer
-	go build $(GOFLAGS) -o chia_transfer ./cmd
+	go build $(GOFLAGS) -o chia_transfer .
 .PHONY: chia_transfer
 BINS+=chia_transfer
 
