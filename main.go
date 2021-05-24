@@ -154,7 +154,7 @@ func main() {
 				}
 			}
 		default:
-			time.Sleep(time.Minute * 10)
+			time.Sleep(time.Second * 5)
 		}
 	}
 }
