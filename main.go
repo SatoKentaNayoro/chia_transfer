@@ -1,0 +1,226 @@
+/**
+ _*_ @Author: IronHuang _*_
+ _*_ @blog:https://www.dvpos.com/ _*_
+ _*_ @Date: 2021/5/24 下午9:46 _*_
+**/
+
+package main
+
+import (
+	"errors"
+	"fmt"
+	"github.com/filecoin-project/lotus/lib/lotuslog"
+	logging "github.com/ipfs/go-log"
+	"gopkg.in/yaml.v2"
+	"io"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+)
+
+var log = logging.Logger("transfer")
+
+const (
+	StatusOnWorking = "StatusOnWorking"
+	StatusOnFree    = "StatusOnFree"
+)
+
+type Config struct {
+	MiddleTmps []MiddleTmp
+	FinalDirs  []FinalDir
+}
+
+type FinalDirWithLock struct {
+	Path   string
+	Status string
+	Flock  *sync.Mutex
+}
+
+type MiddleTmp struct {
+	Path string
+}
+
+type FinalDir struct {
+	Path string
+}
+
+type SrcFile struct {
+	SrcDir   string
+	FilePath string
+}
+
+func main() {
+	lotuslog.SetupLogLevels()
+	config, err := loadConfig()
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	// init finalDir list
+	finalDirWithLockList := initFinalDirs(config)
+
+	var threadChan = make(chan struct{}, len(finalDirWithLockList))
+	var toDoFiles = make(map[string]SrcFile)
+	for {
+		// add middle Files
+		for _, mp := range config.MiddleTmps {
+			filepath.Walk(mp.Path, func(path string, info os.FileInfo, err error) error {
+				if !info.IsDir() && info.Mode().IsRegular() {
+					fullPath := mp.Path + "/" + info.Name()
+					srcFile := SrcFile{
+						SrcDir:   mp.Path,
+						FilePath: fullPath,
+					}
+					// if no in, add one
+					if _, ok := toDoFiles[fullPath]; !ok {
+						toDoFiles[fullPath] = srcFile
+					}
+				}
+				return nil
+			})
+		}
+		select {
+		case threadChan <- struct{}{}:
+			for _, v := range toDoFiles {
+				srcFile := v
+				for _, f := range finalDirWithLockList {
+					fdl := f
+					temporaryPath := strings.Replace(srcFile.FilePath, srcFile.SrcDir, fdl.Path, 1)
+					_, err := os.Stat(temporaryPath)
+					if err == nil {
+						//delete(toDoFiles, k)
+						break
+					}
+					if fdl.Status == StatusOnFree {
+						go func() {
+							fdl.Flock.Lock()
+							fdl.Status = StatusOnWorking
+							fdl.Flock.Unlock()
+							err2 := copy(srcFile.FilePath, temporaryPath)
+							if err2 != nil || !isEqualFile(srcFile.FilePath, temporaryPath) {
+								os.Remove(temporaryPath)
+							}
+							fdl.Flock.Lock()
+							fdl.Status = StatusOnFree
+							fdl.Flock.Unlock()
+							// del src file
+							os.Remove(srcFile.FilePath)
+							log.Infof("copy %s to %s done", srcFile.FilePath, temporaryPath)
+							<-threadChan
+						}()
+					}
+				}
+			}
+		default:
+			time.Sleep(time.Minute * 10)
+		}
+	}
+}
+
+func loadConfig() (*Config, error) {
+	raw, err := ioutil.ReadFile("~/chia_transfer.yaml")
+	if err != nil {
+		return nil, err
+	}
+	config := Config{}
+	err = yaml.Unmarshal(raw, &config)
+	if err != nil {
+		return nil, err
+	}
+	if len(config.FinalDirs) <= 0 || len(config.MiddleTmps) <= 0 {
+		return nil, errors.New("len dirs error")
+	}
+	for i, p := range config.MiddleTmps {
+		pp := strings.TrimRight(p.Path, "/")
+		config.MiddleTmps[i].Path = pp
+	}
+
+	for i, p := range config.FinalDirs {
+		pp := strings.TrimRight(p.Path, "/")
+		config.MiddleTmps[i].Path = pp
+	}
+
+	err = checkPathDoubledAndExisted(&config)
+	if err != nil {
+		return nil, err
+	}
+	return &config, nil
+}
+
+func initFinalDirs(cfg *Config) []*FinalDirWithLock {
+	var fdlList = make([]*FinalDirWithLock, 0)
+	for _, v := range cfg.FinalDirs {
+		fdl := new(FinalDirWithLock)
+		fdl.Path = v.Path
+		fdl.Status = StatusOnFree
+		fdlList = append(fdlList, fdl)
+	}
+	return fdlList
+}
+
+func copy(src, dst string) (err error) {
+	const BufferSize = 1 * 1024 * 1024
+	buf := make([]byte, BufferSize)
+
+	sourceFileStat, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
+	if !sourceFileStat.Mode().IsRegular() {
+		return fmt.Errorf("%s is not a regular file", src)
+	}
+
+	source, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		err2 := source.Close()
+		if err2 != nil && err == nil {
+			err = err2
+		}
+	}()
+
+	if err != nil {
+		return err
+	}
+	destination, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		err2 := destination.Close()
+		if err2 != nil && err == nil {
+			err = err2
+		}
+	}()
+
+	for {
+		//if stop {
+		//	return errors.New(move_common.StoppedBySyscall)
+		//}
+
+		n, err := source.Read(buf)
+		if err != nil && err != io.EOF {
+			return err
+		}
+		if n == 0 {
+			break
+		}
+
+		// 限速
+		//if singleThreadMBPS != 0 {
+		//	sleepTime := 1000000 / int64(singleThreadMBPS)
+		//	time.Sleep(time.Microsecond * time.Duration(sleepTime))
+		//}
+
+		if _, err := destination.Write(buf[:n]); err != nil {
+			return err
+		}
+	}
+	return
+}
