@@ -98,7 +98,7 @@ func main() {
 		}
 
 		ticker := time.NewTicker(time.Minute * 5)
-
+		hasWait := false
 		select {
 		case threadChan <- struct{}{}:
 			// got one thread
@@ -110,6 +110,10 @@ func main() {
 				}
 				mp := mid
 				err := filepath.Walk(mp, func(path string, PathInfo os.FileInfo, err error) error {
+					if PathInfo == nil {
+						_ = <-threadChan
+						return nil
+					}
 					singlePath := path
 					info := PathInfo
 					// if src is copying, skip
@@ -165,7 +169,11 @@ func main() {
 				}
 			}
 		case <-ticker.C:
+			hasWait = true
 			log.Info("don't worry,i'm working now,just no free thread or suitable dst path for now")
+		}
+		if !hasWait {
+			time.Sleep(time.Minute * 5)
 		}
 	}
 }
