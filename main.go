@@ -27,26 +27,34 @@ import (
 
 var log = logging.Logger("transfer")
 var stop = false
+var onWorkingSrc = OnWorkingSrc{
+	onWorkingSrcMap: make(map[string]struct{}),
+	OWSLock:         new(sync.Mutex),
+}
+
+var dstPathSingleton = DstPaths{
+	DstPathMap: make(map[string]bool),
+	DLock:      new(sync.Mutex),
+}
 
 const (
 	StatusOnWorking = "StatusOnWorking"
 	StatusOnFree    = "StatusOnFree"
 )
 
+type DstPaths struct {
+	DstPathMap map[string]bool // if true means on working
+	DLock      *sync.Mutex
+}
+
+type OnWorkingSrc struct {
+	onWorkingSrcMap map[string]struct{}
+	OWSLock         *sync.Mutex
+}
+
 type Config struct {
 	MiddleTmps []string
 	FinalDirs  []string
-}
-
-type FinalDirWithLock struct {
-	Path   string
-	Status string
-	Flock  *sync.Mutex
-}
-
-type SrcFile struct {
-	SrcDir   string
-	FilePath string
 }
 
 func main() {
@@ -56,11 +64,10 @@ func main() {
 		log.Error(err)
 		return
 	}
-	// init finalDir list
-	finalDirWithLockList := initFinalDirs(config)
+	// init dst path map
+	dstPathSingleton := initDstPathSingleton(config)
 
-	var threadChan = make(chan struct{}, len(finalDirWithLockList))
-	var toDoFiles = make(map[string]SrcFile)
+	// listen signal
 	stopSignal := make(chan os.Signal, 2)
 	signal.Notify(stopSignal, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
@@ -69,13 +76,16 @@ func main() {
 			stop = true
 		}
 	}()
+
+	threadChan := make(chan struct{}, len(dstPathSingleton.DstPathMap))
+
 	for {
 		if stop {
 			log.Warn("stop by signal,waiting all working task stop")
 			for {
 				allStop := true
-				for _, f := range finalDirWithLockList {
-					if f.Status != StatusOnFree {
+				for _, f := range dstPathSingleton.DstPathMap {
+					if f {
 						allStop = false
 					}
 				}
@@ -86,77 +96,93 @@ func main() {
 				time.Sleep(time.Second * 5)
 			}
 		}
-		// add middle Files
-		for _, mp := range config.MiddleTmps {
-			err := filepath.Walk(mp, func(path string, info os.FileInfo, err error) error {
-				if !info.IsDir() && info.Mode().IsRegular() {
-					fullPath := mp + "/" + info.Name()
-					srcFile := SrcFile{
-						SrcDir:   mp,
-						FilePath: fullPath,
-					}
-					// if no in, add one
-					if _, ok := toDoFiles[fullPath]; !ok {
-						toDoFiles[fullPath] = srcFile
-					}
-				}
-				return err
-			})
-			if err != nil {
-				log.Error(err)
-				return
-			}
-		}
+
+		ticker := time.NewTicker(time.Minute * 5)
+
 		select {
 		case threadChan <- struct{}{}:
-			for _, v := range toDoFiles {
-				srcFile := v
-				for _, f := range finalDirWithLockList {
-					fdl := f
-					temporaryPath := strings.Replace(srcFile.FilePath, srcFile.SrcDir, fdl.Path, 1)
-					_, err := os.Stat(temporaryPath)
-					if err == nil {
-						//delete(toDoFiles, k)
-						break
+			// got one thread
+			for _, mid := range config.MiddleTmps {
+				mp := mid
+				err := filepath.Walk(mp, func(path string, PathInfo os.FileInfo, err error) error {
+					singlePath := path
+					info := PathInfo
+					// if src is copying, skip
+					if _, ok := onWorkingSrc.onWorkingSrcMap[info.Name()]; ok {
+						return nil
 					}
-					srcStat, err := os.Stat(srcFile.FilePath)
-					if err != nil {
-						log.Error(err)
-						break
-					}
-					var dstStat = new(syscall.Statfs_t)
-					_ = syscall.Statfs(srcFile.SrcDir, dstStat)
 
-					if fdl.Status == StatusOnFree && dstStat.Bavail*uint64(dstStat.Bsize) >= uint64(srcStat.Size()) {
-						go func() {
-							log.Infof("start myCopy %s", srcFile.FilePath)
-							fdl.Flock.Lock()
-							fdl.Status = StatusOnWorking
-							fdl.Flock.Unlock()
-							err2 := myCopy(srcFile.FilePath, temporaryPath)
-							if err2 != nil {
-								log.Errorf("myCopy %s error: %s", srcFile.FilePath, err.Error())
-								os.Remove(temporaryPath)
-							}
-							if !isEqualFile(srcFile.FilePath, temporaryPath) {
-								log.Errorf("myCopy %s error: dst not equal with src", srcFile.FilePath)
-								os.Remove(temporaryPath)
-							}
-							fdl.Flock.Lock()
-							fdl.Status = StatusOnFree
-							fdl.Flock.Unlock()
-							// del src file
-							os.Remove(srcFile.FilePath)
-							log.Infof("myCopy %s to %s done", srcFile.FilePath, temporaryPath)
-							<-threadChan
-						}()
+					if info.IsDir() || !info.Mode().IsRegular() {
+						return nil
 					}
+
+					// if not end with ".plot" skip
+					if strings.HasSuffix(info.Name(), ".plot") {
+						return nil
+					}
+
+					for key, value := range dstPathSingleton.DstPathMap {
+						p := key
+						onWorking := value
+						if key == "" {
+							continue
+						}
+						// if not onWorking,chose this p as dst
+						if !onWorking {
+							// has enough space available or not
+							var stat = new(syscall.Statfs_t)
+							_ = syscall.Statfs(p, stat)
+							if stat.Bavail*uint64(stat.Bsize) < uint64(info.Size()) {
+								continue
+							}
+							// make full dst path
+							fullDstPath := fmt.Sprintf("%s/%s", p, info.Name())
+							// start copy
+							dstPathSingleton.DLock.Lock()
+							dstPathSingleton.DstPathMap[p] = true
+							dstPathSingleton.DLock.Unlock()
+							onWorkingSrc.OWSLock.Lock()
+							onWorkingSrc.onWorkingSrcMap[info.Name()] = struct{}{}
+							onWorkingSrc.OWSLock.Unlock()
+							go startCopy(singlePath, fullDstPath, p, info.Name(), threadChan)
+						}
+					}
+					return err
+				})
+				if err != nil {
+					log.Error(err)
+					return
 				}
 			}
-		default:
-			time.Sleep(time.Second * 5)
+		case <-ticker.C:
+			log.Info("don't worry,i'm working now,just no free thread or suitable dst path for now")
 		}
 	}
+}
+
+func startCopy(src, dst, dstDir, srcName string, threadChan chan struct{}) {
+	err := myCopy(src, dst)
+	if err != nil {
+		os.Remove(dst)
+		log.Errorf("error:%s, when copy from %s to %s", err.Error(), src, dst)
+	}
+	// confirm is equal
+	if isEqualFile(src, dst) {
+		os.Remove(src)
+		log.Info("copy done: from %s to %s", src, dst)
+	} else {
+		os.Remove(dst)
+		log.Error("not equal between %s and %s,will copy again later", src, dst)
+	}
+	// change status
+	dstPathSingleton.DLock.Lock()
+	dstPathSingleton.DstPathMap[dstDir] = false
+	dstPathSingleton.DLock.Unlock()
+	onWorkingSrc.OWSLock.Lock()
+	delete(onWorkingSrc.onWorkingSrcMap, srcName)
+	onWorkingSrc.OWSLock.Unlock()
+	_ = <-threadChan
+	return
 }
 
 func loadConfig() (*Config, error) {
@@ -185,15 +211,11 @@ func loadConfig() (*Config, error) {
 	return &config, nil
 }
 
-func initFinalDirs(cfg *Config) []*FinalDirWithLock {
-	var fdlList = make([]*FinalDirWithLock, 0)
+func initDstPathSingleton(cfg *Config) DstPaths {
 	for _, v := range cfg.FinalDirs {
-		fdl := new(FinalDirWithLock)
-		fdl.Path = v
-		fdl.Status = StatusOnFree
-		fdlList = append(fdlList, fdl)
+		dstPathSingleton.DstPathMap[v] = false
 	}
-	return fdlList
+	return dstPathSingleton
 }
 
 func myCopy(src, dst string) (err error) {
