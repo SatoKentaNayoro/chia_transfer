@@ -103,21 +103,29 @@ func main() {
 		case threadChan <- struct{}{}:
 			// got one thread
 			for _, mid := range config.MiddleTmps {
+				log.Debugf("files num in middleTmps is %d", len(config.MiddleTmps))
+				if len(config.MiddleTmps) == 0 {
+					_ = <-threadChan
+					break
+				}
 				mp := mid
 				err := filepath.Walk(mp, func(path string, PathInfo os.FileInfo, err error) error {
 					singlePath := path
 					info := PathInfo
 					// if src is copying, skip
 					if _, ok := onWorkingSrc.onWorkingSrcMap[info.Name()]; ok {
+						_ = <-threadChan
 						return nil
 					}
 
 					if info.IsDir() || !info.Mode().IsRegular() {
+						_ = <-threadChan
 						return nil
 					}
 
 					// if not end with ".plot" skip
 					if strings.HasSuffix(info.Name(), ".plot") {
+						_ = <-threadChan
 						return nil
 					}
 
@@ -125,6 +133,7 @@ func main() {
 						p := key
 						onWorking := value
 						if key == "" {
+							_ = <-threadChan
 							continue
 						}
 						// if not onWorking,chose this p as dst
@@ -133,6 +142,7 @@ func main() {
 							var stat = new(syscall.Statfs_t)
 							_ = syscall.Statfs(p, stat)
 							if stat.Bavail*uint64(stat.Bsize) < uint64(info.Size()) {
+								_ = <-threadChan
 								continue
 							}
 							// make full dst path
