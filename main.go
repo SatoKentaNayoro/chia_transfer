@@ -180,6 +180,7 @@ func main() {
 }
 
 func startCopy(src, dst, dstDir, srcName string, threadChan chan struct{}) {
+	log.Infof("start copying from src to dst")
 	err := myCopy(src, dst)
 	if err != nil {
 		os.Remove(dst)
