@@ -128,7 +128,8 @@ func main() {
 					}
 
 					// if not end with ".plot" skip
-					if strings.HasSuffix(info.Name(), ".plot") {
+					NameSplit := strings.Split(info.Name(), ".")
+					if NameSplit[len(NameSplit)-1] != "plot" {
 						_ = <-threadChan
 						return nil
 					}
@@ -187,10 +188,10 @@ func startCopy(src, dst, dstDir, srcName string, threadChan chan struct{}) {
 	// confirm is equal
 	if isEqualFile(src, dst) {
 		os.Remove(src)
-		log.Info("copy done: from %s to %s", src, dst)
+		log.Infof("copy done: from %s to %s", src, dst)
 	} else {
 		os.Remove(dst)
-		log.Error("not equal between %s and %s,will copy again later", src, dst)
+		log.Errorf("not equal between %s and %s,will copy again later", src, dst)
 	}
 	// change status
 	dstPathSingleton.DLock.Lock()
