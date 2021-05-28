@@ -289,7 +289,7 @@ func myCopy(src, dst string) (err error) {
 			break
 		}
 
-		// 限速
+		// speed limit
 		//if singleThreadMBPS != 0 {
 		//	sleepTime := 1000000 / int64(singleThreadMBPS)
 		//	time.Sleep(time.Microsecond * time.Duration(sleepTime))
