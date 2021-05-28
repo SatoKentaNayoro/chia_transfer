@@ -127,7 +127,7 @@ func main() {
 						return nil
 					}
 
-					// if not end with ".plot" skip
+					// if not end with ".plot", skip
 					NameSplit := strings.Split(info.Name(), ".")
 					if NameSplit[len(NameSplit)-1] != "plot" {
 						_ = <-threadChan
@@ -172,11 +172,12 @@ func main() {
 			}
 		case <-ticker.C:
 			hasWait = true
-			log.Info("don't worry,i'm working now,just no free thread or suitable dst path for now")
+			log.Info("don't worry,i'm working,just no free thread,no src files or no suitable dst path for now")
 		case <-stopSignal:
 			continue
 		}
 		if !hasWait {
+			log.Info("don't worry,i'm working,just no free thread,no src files or no suitable dst path for now")
 			for i := 0; i < 150; i++ {
 				if stop {
 					break
