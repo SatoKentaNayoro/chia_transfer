@@ -18,6 +18,9 @@ import (
 func isEqualFile(srcPath, dstPath string) bool {
 	srcStat, _ := os.Stat(srcPath)
 	dstStat, _ := os.Stat(dstPath)
+	if dstStat == nil || srcStat == nil {
+		return false
+	}
 	if srcStat.Size() != dstStat.Size() {
 		return false
 	}
