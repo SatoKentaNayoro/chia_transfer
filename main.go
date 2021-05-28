@@ -172,6 +172,8 @@ func main() {
 		case <-ticker.C:
 			hasWait = true
 			log.Info("don't worry,i'm working now,just no free thread or suitable dst path for now")
+		case <-stopSignal:
+			continue
 		}
 		if !hasWait {
 			time.Sleep(time.Minute * 5)
