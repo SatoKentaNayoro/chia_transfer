@@ -185,15 +185,17 @@ func startCopy(src, dst, dstDir, srcName string, threadChan chan struct{}) {
 	if err != nil {
 		os.Remove(dst)
 		log.Errorf("error:%s, when copy from %s to %s", err.Error(), src, dst)
-	}
-	// confirm is equal
-	if isEqualFile(src, dst) {
-		os.Remove(src)
-		log.Infof("copy done: from %s to %s", src, dst)
 	} else {
-		os.Remove(dst)
-		log.Errorf("not equal between %s and %s,will copy again later", src, dst)
+		// confirm is equal
+		if isEqualFile(src, dst) {
+			os.Remove(src)
+			log.Infof("copy done: from %s to %s", src, dst)
+		} else {
+			os.Remove(dst)
+			log.Errorf("not equal between %s and %s,will copy again later", src, dst)
+		}
 	}
+
 	// change status
 	dstPathSingleton.DLock.Lock()
 	dstPathSingleton.DstPathMap[dstDir] = false
