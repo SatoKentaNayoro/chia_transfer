@@ -83,14 +83,15 @@ func main() {
 		if stop {
 			log.Warn("stop by signal,waiting all working task stop")
 			for {
-				allStop := true
+				workingNum := 0
 				for _, f := range dstPathSingleton.DstPathMap {
 					if f {
-						allStop = false
+						workingNum++
 					}
 				}
-				if allStop {
+				if workingNum == 0 {
 					log.Warn("all working task stopped")
+					close(threadChan)
 					return
 				}
 				time.Sleep(time.Second * 5)
@@ -103,7 +104,6 @@ func main() {
 		case threadChan <- struct{}{}:
 			// got one thread
 			for _, mid := range config.MiddleTmps {
-				log.Debugf("files num in middleTmps is %d", len(config.MiddleTmps))
 				if len(config.MiddleTmps) == 0 {
 					_ = <-threadChan
 					break
