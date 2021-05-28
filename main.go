@@ -176,7 +176,12 @@ func main() {
 			continue
 		}
 		if !hasWait {
-			time.Sleep(time.Minute * 5)
+			for i := 0; i < 150; i++ {
+				if stop {
+					break
+				}
+				time.Sleep(time.Second * 2)
+			}
 		}
 	}
 }
