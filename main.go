@@ -171,18 +171,20 @@ func main() {
 			}
 		default:
 		}
-		waitingForNextRound()
+		waitingForNextRound(stopSignal)
 		roundTimes++
 	}
 }
 
-func waitingForNextRound() {
+func waitingForNextRound(stopSignal chan os.Signal) {
 	log.Info("wait 5 minutes, before next round")
 	for i := 0; i < 150; i++ {
-		if stop {
+		select {
+		case <-stopSignal:
 			break
+		default:
+			time.Sleep(time.Second * 2)
 		}
-		time.Sleep(time.Second * 2)
 	}
 }
 
