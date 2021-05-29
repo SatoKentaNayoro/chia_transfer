@@ -73,6 +73,7 @@ func main() {
 	go func() {
 		select {
 		case <-stopSignal:
+			log.Warn("stopped by signal,will exit the process soon")
 			stop = true
 		}
 	}()
@@ -85,8 +86,9 @@ func main() {
 			log.Warn("stop by signal,waiting all working task stop")
 			for {
 				workingNum := 0
-				for _, f := range dstPathSingleton.DstPathMap {
+				for k, f := range dstPathSingleton.DstPathMap {
 					if f {
+						log.Info("%s is still working", k)
 						workingNum++
 					}
 				}
@@ -171,20 +173,18 @@ func main() {
 			}
 		default:
 		}
-		waitingForNextRound(stopSignal)
+		waitingForNextRound()
 		roundTimes++
 	}
 }
 
-func waitingForNextRound(stopSignal chan os.Signal) {
+func waitingForNextRound() {
 	log.Info("wait 5 minutes, before next round")
 	for i := 0; i < 150; i++ {
-		select {
-		case <-stopSignal:
+		if stop {
 			break
-		default:
-			time.Sleep(time.Second * 2)
 		}
+		time.Sleep(time.Second * 2)
 	}
 }
 
