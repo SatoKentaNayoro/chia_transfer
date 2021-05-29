@@ -78,8 +78,9 @@ func main() {
 	}()
 
 	threadChan := make(chan struct{}, len(dstPathSingleton.DstPathMap))
-
+	roundTimes := 1
 	for {
+		log.Debugf("round NO.%d", roundTimes)
 		if stop {
 			log.Warn("stop by signal,waiting all working task stop")
 			for {
@@ -160,7 +161,6 @@ func main() {
 							go startCopy(singlePath, fullDstPath, p, info.Name(), threadChan)
 							return nil
 						}
-
 					}
 					return err
 				})
@@ -169,11 +169,10 @@ func main() {
 					return
 				}
 			}
-		case <-stopSignal:
-			continue
 		default:
 		}
 		waitingForNextRound()
+		roundTimes++
 	}
 }
 
