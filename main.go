@@ -173,11 +173,11 @@ func main() {
 			continue
 		default:
 		}
-		waitingForNetRound()
+		waitingForNextRound()
 	}
 }
 
-func waitingForNetRound() {
+func waitingForNextRound() {
 	log.Info("wait 5 minutes, before next round")
 	for i := 0; i < 150; i++ {
 		if stop {
