@@ -161,7 +161,7 @@ func main() {
 							onWorkingSrc.onWorkingSrcMap[info.Name()] = struct{}{}
 							onWorkingSrc.OWSLock.Unlock()
 							go startCopy(singlePath, fullDstPath, p, info.Name(), threadChan)
-							return nil
+							break
 						}
 					}
 					return err
