@@ -101,78 +101,84 @@ func main() {
 			}
 		}
 
-		select {
-		case threadChan <- struct{}{}:
-			// got one thread
-			for _, mid := range config.MiddleTmps {
-				if len(config.MiddleTmps) == 0 {
-					_ = <-threadChan
-					break
+		for _, mid := range config.MiddleTmps {
+			if len(config.MiddleTmps) == 0 {
+				break
+			}
+			mp := mid
+			err := filepath.Walk(mp, func(path string, PathInfo os.FileInfo, err error) error {
+				singlePath := path
+				info := PathInfo
+				if info == nil {
+					return nil
 				}
-				mp := mid
-				err := filepath.Walk(mp, func(path string, PathInfo os.FileInfo, err error) error {
-					if PathInfo == nil {
-						_ = <-threadChan
-						return nil
-					}
-					singlePath := path
-					info := PathInfo
-					// if src is copying, skip
-					if _, ok := onWorkingSrc.onWorkingSrcMap[info.Name()]; ok {
-						_ = <-threadChan
-						return nil
-					}
 
-					if info.IsDir() || !info.Mode().IsRegular() {
-						_ = <-threadChan
-						return nil
-					}
+				// if src is copying, skip
+				onWorkingSrc.OWSLock.Lock()
+				if _, ok := onWorkingSrc.onWorkingSrcMap[info.Name()]; ok {
+					onWorkingSrc.OWSLock.Unlock()
+					return nil
+				}
 
-					// if not end with ".plot", skip
-					NameSplit := strings.Split(info.Name(), ".")
-					if NameSplit[len(NameSplit)-1] != "plot" {
-						_ = <-threadChan
-						return nil
-					}
+				if info.IsDir() || !info.Mode().IsRegular() {
+					onWorkingSrc.OWSLock.Unlock()
+					return nil
+				}
 
-					for key, value := range dstPathSingleton.DstPathMap {
-						p := key
-						onWorking := value
-						if key == "" {
-							_ = <-threadChan
+				// if not end with ".plot", skip
+				NameSplit := strings.Split(info.Name(), ".")
+				if NameSplit[len(NameSplit)-1] != "plot" {
+					onWorkingSrc.OWSLock.Unlock()
+					return nil
+				}
+
+				// try to get on free dst
+				dstPathSingleton.DLock.Lock()
+				found := false
+				for key, value := range dstPathSingleton.DstPathMap {
+					p := key
+					onWorking := value
+					if key == "" {
+						continue
+					}
+					// if not onWorking,chose this p as dst
+					if !onWorking {
+						// has enough space available or not
+						var stat = new(syscall.Statfs_t)
+						_ = syscall.Statfs(p, stat)
+						if stat.Bavail*uint64(stat.Bsize) < uint64(info.Size()) {
 							continue
 						}
-						// if not onWorking,chose this p as dst
-						if !onWorking {
-							// has enough space available or not
-							var stat = new(syscall.Statfs_t)
-							_ = syscall.Statfs(p, stat)
-							if stat.Bavail*uint64(stat.Bsize) < uint64(info.Size()) {
-								_ = <-threadChan
-								continue
-							}
-							// make full dst path
-							fullDstPath := fmt.Sprintf("%s/%s", p, info.Name())
+						// make full dst path
+						fullDstPath := fmt.Sprintf("%s/%s", p, info.Name())
+						select {
+						case threadChan <- struct{}{}:
+							// got one thread
 							// start copy
-							dstPathSingleton.DLock.Lock()
 							dstPathSingleton.DstPathMap[p] = true
-							dstPathSingleton.DLock.Unlock()
-							onWorkingSrc.OWSLock.Lock()
 							onWorkingSrc.onWorkingSrcMap[info.Name()] = struct{}{}
-							onWorkingSrc.OWSLock.Unlock()
 							go startCopy(singlePath, fullDstPath, p, info.Name(), threadChan)
-							break
+							found = true
+						default:
 						}
 					}
-					return err
-				})
-				if err != nil {
-					log.Error(err)
-					return
+					if found {
+						break
+					}
 				}
+				dstPathSingleton.DLock.Unlock()
+				onWorkingSrc.OWSLock.Unlock()
+				return err
+			})
+
+			if err != nil {
+				log.Error(err)
+				return
 			}
-		default:
+
 		}
+
+		// wait 5 minute
 		waitingForNextRound()
 		roundTimes++
 	}
