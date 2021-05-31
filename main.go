@@ -114,26 +114,21 @@ func main() {
 				}
 
 				// if src is copying, skip
-				onWorkingSrc.OWSLock.Lock()
 				if _, ok := onWorkingSrc.onWorkingSrcMap[info.Name()]; ok {
-					onWorkingSrc.OWSLock.Unlock()
 					return nil
 				}
 
 				if info.IsDir() || !info.Mode().IsRegular() {
-					onWorkingSrc.OWSLock.Unlock()
 					return nil
 				}
 
 				// if not end with ".plot", skip
 				NameSplit := strings.Split(info.Name(), ".")
 				if NameSplit[len(NameSplit)-1] != "plot" {
-					onWorkingSrc.OWSLock.Unlock()
 					return nil
 				}
 
 				// try to get on free dst
-				dstPathSingleton.DLock.Lock()
 				found := false
 				for key, value := range dstPathSingleton.DstPathMap {
 					p := key
@@ -166,8 +161,6 @@ func main() {
 						break
 					}
 				}
-				dstPathSingleton.DLock.Unlock()
-				onWorkingSrc.OWSLock.Unlock()
 				return err
 			})
 
