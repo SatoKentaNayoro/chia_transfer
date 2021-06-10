@@ -14,7 +14,7 @@ sudo make install
 ## how run
 
 ```shell
-# befor run you need an config file in homedir whic like deme_chia_transfer.yaml in chia_transfer dir
+# befor running, you need an config file in homedir which like demo_chia_transfer.yaml in chia_transfer dir
 # you should write your middle path and final path into config file,and you need add path like /mnt/middle not /mnt/middle/,whitout right "/".(I was lazy 0.0)
 
 nohup chia_transfer >> transfer.log &
