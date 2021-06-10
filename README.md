@@ -5,6 +5,7 @@ chia_transfer is a simple tool for transfering final plots from middle dir to fi
 ```shell
 # befor install chia_transfer,you need install go1.15.5 or later
 git clone https://github.com/apehole/chia_transfer.git
+git checkout master
 cd chia_transfer
 make all
 sudo make install
